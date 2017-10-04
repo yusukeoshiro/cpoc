@@ -30,6 +30,7 @@
 	<action formid="addCoupon" valid-form="false"/>
 	<action formid="updateCart" valid-form="false"/>
 	<action formid="checkoutCart" valid-form="false"/>
+	<action formid="downloadCart" valid-form="false"/>
 	<action formid="continueShopping" valid-form="false"/>
 	<action formid="register" valid-form="false"/>
 	<action formid="unregistered" valid-form="false"/>

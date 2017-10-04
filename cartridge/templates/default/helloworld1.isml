@@ -1,0 +1,3 @@
+<!--- TEMPLATENAME: helloworld1.isml --->
+
+${pdict.myParameteronISML}

@@ -1,0 +1,19 @@
+<isdecorate template = "checkout/cart/pt_cart">
+
+Basket price is: ${pdict.myBasket.adjustedMerchandizeTotalGrossPrice}
+<br/>
+<isloop items="${pdict.myBasket.allProductLineItems}"  var="productLineItem"  status="loopstate" >
+<iscomment>
+	The first time thru: ${loopstate.first}<br>
+	The current count is: ${loopstate.count}</br>
+	The current index is: ${loopstate.index}</br>
+	The last time thru: ${loopstate.last}</br>
+ </iscomment>	
+<isif condition="${productLineItem.optionProductLineItem != true}">
+${productLineItem.product.name}<br/>
+<iselse>
+	${productLineItem.lineItemText} for ${productLineItem.adjustedPrice}
+</isif>
+</isloop>
+
+</isdecorate>

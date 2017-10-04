@@ -13,10 +13,10 @@ var ISML = require('dw/template/ISML');
 var Resource = require('dw/web/Resource');
 var Transaction = require('dw/system/Transaction');
 var URLUtils = require('dw/web/URLUtils');
-
-/* Script Modules */
-var app = require('~/cartridge/scripts/app');
-var guard = require('~/cartridge/scripts/guard');
+var File = require('dw/io/File');
+var guard = require('storefront_controllers/cartridge/scripts/guard');
+var app = require('storefront_controllers/cartridge/scripts/app');
+var training_app = require('training/cartridge/scripts/training_app');
 
 /**
  * Redirects the user to the last visited catalog URL if known, otherwise redirects to
@@ -43,8 +43,8 @@ function show() {
 
     cartForm.get('shipments').invalidate();
 
-    app.getView('Cart', {
-        cart: app.getModel('Cart').get(),
+    training_app.getView('Cart', {
+        cart: training_app.getModel('Cart').get(),
         RegistrationStatus: false
     }).render('checkout/cart/cart');
 
@@ -84,7 +84,7 @@ function submitForm() {
     // There is no existing state, so resolve the basket again.
     var cart, formResult, cartForm, cartAsset, pageMeta;
     cartForm = app.getForm('cart');
-    cart = app.getModel('Cart').goc();
+    cart = training_app.getModel('Cart').goc();
 
     formResult = cartForm.handleAction({
         //Add a coupon if a coupon was entered correctly and is active.
@@ -221,6 +221,16 @@ function submitForm() {
                 EnableCheckout: true
             };
         },
+        'downloadCart': function () {
+      	  return {
+               redirectToDownload: true
+            };
+      },
+      'uploadCart': function () {
+    	  
+    	  //uploadFileToCart();
+    	  return null;
+      },
         'error': function () {
             return null;
         }
@@ -229,7 +239,7 @@ function submitForm() {
     if (formResult) {
         cartAsset = app.getModel('Content').get('cart');
 
-        pageMeta = require('~/cartridge/scripts/meta');
+        pageMeta = require('storefront_controllers/cartridge/scripts/meta');
         pageMeta.update(cartAsset);
 
         if (formResult.dontRedirect) {
@@ -239,7 +249,10 @@ function submitForm() {
                 CouponStatus: formResult.CouponStatus,
                 CouponError: formResult.CouponError
             }).render('checkout/cart/cart');
-        } else {
+        }if (formResult.redirectToDownload) {
+        	response.redirect(URLUtils.https('DownloadBasket-Start'));
+        }
+        else {
             response.redirect(URLUtils.https('Cart-Show'));
         }
     }
@@ -262,7 +275,7 @@ function submitForm() {
  * otherwise renders the checkout/cart/cart template.
  */
 function addProduct() {
-    var cart = app.getModel('Cart').goc();
+    var cart = training_app.getModel('Cart').goc();
     var renderInfo = cart.addProductToCart();
 
     if (renderInfo.source === 'giftregistry') {
@@ -286,7 +299,7 @@ function addProduct() {
  */
 function miniCart() {
 
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
     app.getView({
         Basket: cart ? cart.object : null
     }).render('checkout/cart/minicart');
@@ -313,7 +326,7 @@ function addToWishlist() {
     productList.addProduct(product.object, request.httpParameterMap.Quantity.doubleValue, productOptionModel);
 
     app.getView('Cart', {
-        cart: app.getModel('Cart').get(),
+        cart: training_app.getModel('Cart').get(),
         ProductAddedToWishlist: productID
     }).render('checkout/cart/cart');
 
@@ -335,7 +348,7 @@ function addToWishlist() {
  */
 function addBonusProductJson() {
     var h, i, j, cart, data, productsJSON, bonusDiscountLineItem, product, lineItem, childPids, childProduct, foundLineItem, Product;
-    cart = app.getModel('Cart').goc();
+    cart = training_app.getModel('Cart').goc();
     Product = app.getModel('Product');
 
     // parse bonus product JSON
@@ -416,7 +429,7 @@ function addCouponJson() {
     var couponCode, cart, couponStatus;
 
     couponCode = request.httpParameterMap.couponCode.stringValue;
-    cart = app.getModel('Cart').goc();
+    cart = training_app.getModel('Cart').goc();
 
     Transaction.wrap(function () {
         couponStatus = cart.addCoupon(couponCode);
@@ -433,6 +446,8 @@ function addCouponJson() {
         });
     }
 }
+
+
 
 /*
 * Module exports

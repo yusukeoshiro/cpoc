@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<form xmlns="http://www.demandware.com/xml/form/2008-04-19">
+
+
+ 
+	<!-- <field formid="fileName" type="string" mandatory="false" label="forms.interestedinApparel"/> -->
+ 
+	<!-- functional buttons -->
+	<action formid="uploadCart" valid-form="false"/>
+
+</form>

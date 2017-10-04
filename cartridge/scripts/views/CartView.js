@@ -5,9 +5,9 @@
  * calculation are up to date before rendering the cart.
  * @module views/CartView
  */
-var View = require('./View');
+var View = require('storefront_controllers/cartridge/scripts/views/View');
 
-var Cart = require('~/cartridge/scripts/models/CartModel');
+var Cart = require('training/cartridge/scripts/models/CartModel');
 var Transaction = require('dw/system/Transaction');
 
 /**
@@ -20,7 +20,7 @@ var Transaction = require('dw/system/Transaction');
  */
 var CartView = View.extend({
 
-    /**
+	 /**
      * Updates shipments, coupons, and cart calculation for the view and validates the cart
      * for checkout.
      */
@@ -41,12 +41,11 @@ var CartView = View.extend({
             var validationResult = Cart.get(cart).validateForCheckout();
             this.EnableCheckout = validationResult.EnableCheckout;
             this.BasketStatus = validationResult.BasketStatus;
-            this.WishList = customer.authenticated ? require('~/cartridge/scripts/models/ProductListModel').get() : null;
+            this.WishList = customer.authenticated ? require('storefront_controllers/cartridge/scripts/models/ProductListModel').get() : null;
         }
 
         return;
     },
-
     /**
      * View for store locator functionality.
      * @extends module:views/View~View

@@ -5,10 +5,11 @@
  * @module models/ProductModel
  */
 
-var AbstractModel = require('./AbstractModel');
-var app = require('~/cartridge/scripts/app');
+//var AbstractModel = require('./AbstractModel');
+var AbstractModel = require('storefront_controllers/cartridge/scripts/models/AbstractModel');
+var app = require('storefront_controllers/cartridge/scripts/app');
 var ProductMgr = require('dw/catalog/ProductMgr');
-
+var training_app = require('training/cartridge/scripts/training_app');
 /**
  * Product helper providing enhanced product functionality
  * @class module:models/ProductModel~ProductModel
@@ -50,7 +51,7 @@ var ProductModel = AbstractModel.extend(
             // Return the ProductVariationModel of a sole variant of a Product Master
             let variants = this.getVariants();
             if (variants.length === 1) {
-                return variants[0].getVariationModel();
+                return 		variants[0].getVariationModel();
             }
 
             if (this.isProductSet() || this.isBundle()) {
@@ -61,9 +62,13 @@ var ProductModel = AbstractModel.extend(
                 return this.getVariationModel();
             }
 
-            let ProductVariationModel = app.getModel('ProductVariation');
+            var tempVariationModel = this.getVariationModel(); // ProductVaritationAttributes, Returns all Variation attributes
+            let ProductVariationModel = training_app.getModel('ProductVariation');
             let variationModel = new ProductVariationModel(this.getVariationModel());
 
+            // Added By Muni
+           // variationModel.getAllVariant_Values();
+            // END Muni
             for (let k = 0; k < paramNames.length; k++) {
                 let attributeID = paramNames[k];
                 let valueID = params.get(attributeID).getStringValue();

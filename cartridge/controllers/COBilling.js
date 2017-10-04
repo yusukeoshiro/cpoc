@@ -22,9 +22,9 @@ var URLUtils = require('dw/web/URLUtils');
 var Countries = require('storefront_core/cartridge/scripts/util/Countries');
 
 /* Script Modules */
-var app = require('~/cartridge/scripts/app');
-var guard = require('~/cartridge/scripts/guard');
-
+var app = require('storefront_controllers/cartridge/scripts/app');
+var guard = require('storefront_controllers/cartridge/scripts/guard');
+var training_app = require('training/cartridge/scripts/training_app');
 /**
  * Initializes the address form. If the customer chose "use as billing
  * address" option on the single shipping page the form is prepopulated with the shipping
@@ -77,7 +77,7 @@ function initEmailAddress(cart) {
  * @param {object} params - (optional) if passed, added to view properties so they can be accessed in the template.
  */
 function returnToForm(cart, params) {
-    var pageMeta = require('~/cartridge/scripts/meta');
+    var pageMeta = require('storefront_controllers/cartridge/scripts/meta');
 
     // if the payment method is set to gift certificate get the gift certificate code from the form
     if (!empty(cart.getPaymentInstrument()) && cart.getPaymentInstrument().getPaymentMethod() === PaymentInstrument.METHOD_GIFT_CERTIFICATE) {
@@ -91,7 +91,7 @@ function returnToForm(cart, params) {
     });
 
     if (params) {
-        app.getView(require('~/cartridge/scripts/object').extend(params, {
+        app.getView(require('storefront_controllers/cartridge/scripts/object').extend(params, {
             Basket: cart.object,
             ContinueURL: URLUtils.https('COBilling-Billing')
         })).render('checkout/billing/billing');
@@ -117,7 +117,7 @@ function start(cart, params) {
         cart.calculate();
     });
 
-    var pageMeta = require('~/cartridge/scripts/meta');
+    var pageMeta = require('storefront_controllers/cartridge/scripts/meta');
     pageMeta.update({
         pageTitle: Resource.msg('billing.meta.pagetitle', 'checkout', 'SiteGenesis Checkout')
     });
@@ -167,7 +167,7 @@ function initCreditCardList(cart) {
  * and COShippingMultiple call this function.
  */
 function publicStart() {
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
     if (cart) {
 
         // Initializes all forms of the billing page including: - address form - email address - coupon form
@@ -200,7 +200,7 @@ function publicStart() {
  */
 function adjustGiftCertificates() {
     var i, j, cart, gcIdList, gcID, gc;
-    cart = app.getModel('Cart').get();
+    cart = training_app.getModel('Cart').get();
 
     if (cart) {
         gcIdList = cart.getGiftCertIdList();
@@ -262,7 +262,7 @@ function handleCoupon() {
  */
 function redeemGiftCertificate(giftCertCode) {
     var cart, gc, newGCPaymentInstrument, gcPaymentInstrument, status, result;
-    cart = app.getModel('Cart').get();
+    cart = training_app.getModel('Cart').get();
 
     if (cart) {
         // fetch the gift certificate
@@ -302,7 +302,7 @@ function redeemGiftCertificate(giftCertCode) {
  */
 function updateCreditCardSelection() {
     var cart, applicableCreditCards, UUID, selectedCreditCard, instrumentsIter, creditCardInstrument;
-    cart = app.getModel('Cart').get();
+    cart = training_app.getModel('Cart').get();
 
     applicableCreditCards = initCreditCardList(cart).ApplicableCreditCards;
 
@@ -343,7 +343,7 @@ function updateCreditCardSelection() {
  */
 function resetPaymentForms() {
 
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
 
     var status = Transaction.wrap(function () {
         if (app.getForm('billing').object.paymentMethods.selectedPaymentMethodID.value.equals('PayPal')) {
@@ -466,7 +466,7 @@ function handleBillingAddress(cart) {
  */
 function updateAddressDetails() {
     var cart, address, billingAddress;
-    cart = app.getModel('Cart').get();
+    cart = training_app.getModel('Cart').get();
 
     if (cart) {
 
@@ -532,7 +532,7 @@ function billing() {
             return;
         },
         save: function () {
-            var cart = app.getModel('Cart').get();
+            var cart = training_app.getModel('Cart').get();
 
             if (!resetPaymentForms() || !validateBilling() || !handleBillingAddress(cart) || // Performs validation steps, based upon the entered billing address
             // and address options.
@@ -548,7 +548,7 @@ function billing() {
                 app.getForm('billing').object.fulfilled.value = true;
 
                 // A successful billing page will jump to the next checkout step.
-                app.getController('COSummary').Start();
+                training_app.getController('COSummary').Start();
                 return;
             }
         },
@@ -591,7 +591,7 @@ function redeemGiftCertificateJson() {
  */
 function removeGiftCertificate() {
     if (!empty(request.httpParameterMap.giftCertificateID.stringValue)) {
-        var cart = app.getModel('Cart').get();
+        var cart = training_app.getModel('Cart').get();
 
         Transaction.wrap(function () {
             cart.removeGiftCertificatePaymentInstrument(request.httpParameterMap.giftCertificateID.stringValue);
@@ -608,7 +608,7 @@ function removeGiftCertificate() {
  */
 function updateSummary() {
 
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
 
     Transaction.wrap(function () {
         cart.calculate();
@@ -705,7 +705,7 @@ function getGiftCertificateBalance() {
  */
 function selectCreditCard() {
     var cart, applicableCreditCards, selectedCreditCard, instrumentsIter, creditCardInstrument;
-    cart = app.getModel('Cart').get();
+    cart = training_app.getModel('Cart').get();
 
     applicableCreditCards = initCreditCardList(cart).ApplicableCreditCards;
     selectedCreditCard = null;

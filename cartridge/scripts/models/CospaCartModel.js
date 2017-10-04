@@ -23,478 +23,89 @@ var ShippingMgr = require('dw/order/ShippingMgr');
 var StoreMgr = require('dw/catalog/StoreMgr');
 var TransientAddress = require('storefront_controllers/cartridge/scripts/models/TransientAddressModel');
 var UUIDUtils = require('dw/util/UUIDUtils');
-var txn = require('dw/system/Transaction');
-var Logger = require('dw/system/Logger');
 var lineItem;
 var app = require('storefront_controllers/cartridge/scripts/app');
 var ProductList = app.getModel('ProductList');
-
-/**
- * Cart helper providing enhanced cart functionality
- * @class module:models/CartModel~CartModel
- * @extends module:models/AbstractModel
- *
- * @param {dw.order.Basket} obj The basket object to enhance/wrap.
- */
-var CartModel = AbstractModel.extend({
-    /** @lends module:models/CartModel~CartModel.prototype */
-    /**
-     * Triggers the cart calculation by executing the hook 'dw.ocapi.shop.basket.calculate'.
-     *
-     * @transactional
-     * @alias module:models/CartModel~CartModel/calculate
-     * @return {dw.system.Status} Returns OK if cart when the cart is recalculated.
-     */
+var Logger = require('dw/system/Logger');
+var TrainerLogger = Logger.getLogger('training','training');
+var txn = require('dw/system/Transaction');
+var CospaCartModel = AbstractModel.extend({
+  
     calculate: function () {
-       // dw.system.HookMgr.callHook('dw.ocapi.shop.basket.calculate', 'calculate', this.object);
-    	 dw.system.HookMgr.callHook('dw.ocapi.shop.basket.training.calculate', 'calculate', this.object);
+        dw.system.HookMgr.callHook('dw.ocapi.shop.basket.calculate', 'calculate', this.object);
     },
 
-    addProductToCart: function() {
-        var cart = this;
-        var params = request.httpParameterMap;
-        var format = params.hasOwnProperty('format') && params.format.stringValue ? params.format.stringValue.toLowerCase() : '';
-        var newBonusDiscountLineItem;
-        var Product = app.getModel('Product');
-        var productOptionModel;
-        var productToAdd;
-        var template = 'checkout/cart/minicart';
-
-        // Edit details of a gift registry
-        if (params.source && params.source.stringValue === 'giftregistry' && params.cartAction && params.cartAction.stringValue === 'update') {
-            ProductList.replaceProductListItem();
-            return {
-                source: 'giftregistry'
-            };
-        }
-
-        if (params.source && params.source.stringValue === 'wishlist' && params.cartAction && params.cartAction.stringValue === 'update') {
-            app.getController('Wishlist').ReplaceProductListItem();
-            return;
-        }
-
-        // Updates a product line item.
-        if (params.uuid.stringValue) {
-            var lineItem = cart.getProductLineItemByUUID(params.uuid.stringValue);
-            if (lineItem) {
-                var productModel = Product.get(params.pid.stringValue);
-                var quantity = parseInt(params.Quantity.value);
-
-                productToAdd = productModel.object;
-                productOptionModel = productModel.updateOptionSelection(params);
-
-                Transaction.wrap(function () {
-                    cart.updateLineItem(lineItem, productToAdd, quantity, productOptionModel);
-                });
-
-                if (format === 'ajax') {
-                    template = 'checkout/cart/refreshcart';
-                }
-            } else {
-                return {
-                    template: 'checkout/cart/cart'
-                };
-            }
-        // Adds a product from a product list.
-        } else if (params.plid.stringValue) {
-            var productList = ProductListMgr.getProductList(params.plid.stringValue);
-            if (productList) {
-                cart.addProductListItem(productList.getItem(params.itemid.stringValue), params.Quantity.doubleValue);
-            }
-
-        // Adds a product.
-        } else {
-            var previousBonusDiscountLineItems = cart.getBonusDiscountLineItems();
-            productToAdd = Product.get(params.pid.stringValue);
-
-            if (productToAdd.object.isProductSet()) {
-                var childPids = params.childPids.stringValue.split(',');
-                var childQtys = params.childQtys.stringValue.split(',');
-                var counter = 0;
-
-                for (var i = 0; i < childPids.length; i++) {
-                    var childProduct = Product.get(childPids[i]);
-
-                    if (childProduct.object && !childProduct.isProductSet()) {
-                        var childProductOptionModel = childProduct.updateOptionSelection(params);
-                        cart.addProductItem(childProduct.object, parseInt(childQtys[counter]), childProductOptionModel);
-                    }
-                    counter++;
-                }
-            } else {
-                productOptionModel = productToAdd.updateOptionSelection(params);
-                cart.addProductItem(productToAdd.object, params.Quantity.doubleValue, productOptionModel);
-            }
-
-            // When adding a new product to the cart, check to see if it has triggered a new bonus discount line item.
-            newBonusDiscountLineItem = cart.getNewBonusDiscountLineItem(previousBonusDiscountLineItems);
-        }
+    addProductToCart: function(pid,qtyDoubleValue,calculate) {
+        var cospaCart = this;
         
-        // Add Product to download Basket ... Muni
-        	//addProductToDownloadBasket(productToAdd.object,params.Quantity.doubleValue);
-        	addProductToProductList(productToAdd.object,params.Quantity.doubleValue);
+        var Product = app.getModel('Product');
+        
+        var productToAdd = Product.get(pid);
 
-        return {
-            format: format,
-            template: template,
-            BonusDiscountLineItem: newBonusDiscountLineItem
-        };
+//        var  productOptionModel = productToAdd.updateOptionSelection(params);
+        var productOptionModel=null;
+        cospaCart.addProductItem(productToAdd.object, qtyDoubleValue, productOptionModel,calculate);
+          
     },
 
-    /**
-     * Adds a product list item to the cart and recalculates the cart.
-     *
-     * @alias module:models/CartModel~CartModel/addProductListItem
-     * @transactional
-     * @param {dw.customer.ProductListItem} productListItem The product list item whose associated product is added to the basket.
-     * @param {Number} quantity The quantity of the product.
-     */
-    addProductListItem: function (productListItem, quantity) {
-
-        if (productListItem) {
-            var cart = this;
-
-            Transaction.wrap(function () {
-                var shipment = cart.object.defaultShipment;
-                cart.createProductLineItem(productListItem, shipment).setQuantityValue(quantity);
-
-                cart.calculate();
-            });
-        }
-    },
-
-    /**
-     * Adds a product to the cart and recalculates the cart.
-     * By default, when a bundle is added to cart, all its child products are added too, but if those products are
-     * variants then the code must replace the master products with the selected variants that are passed in the
-     * HTTP params as childPids along with any options.
-     * @params {request.httpParameterMap.childPids} - comma separated list of
-     * product IDs of the bundled products that are variations.
-     *
-     * @transactional
-     * @alias module:models/CartModel~CartModel/addProductItem
-     * @param {String} pid - ID of the product that is to be added to the basket.
-     * @param {Number} quantity - The quantity of the product.
-     * @param {dw.catalog.ProductOptionModel} productOptionModel - The option model of the product that is to be added to the basket.
-     */
-    addProductItem: function (product, quantity, productOptionModel) {
-        var cart = this;
-        Transaction.wrap(function () {
-            var i;
+    addProductItem: function (product, quantity, productOptionModel,calculate) {
+        	var cospaCart = this;        
+        	var isComitted = false;
             if (product) {
-                var productInCart;
-                var productLineItem;
-                var productLineItems = cart.object.productLineItems;
-                var quantityInCart;
-                var quantityToSet;
-                var shipment = cart.object.defaultShipment;
+            	txn.begin();
+            	try {
+            		   var productInCart;
+                       var productLineItem;
+                       var productLineItems = cospaCart.object.productLineItems;
+                       var quantityInCart;
+                       var quantityToSet;
+                       var shipment = cospaCart.object.defaultShipment;
 
-                for (var q = 0; q < productLineItems.length; q++) {
-                    if (productLineItems[q].productID === product.ID) {
-                        productInCart = productLineItems[q];
-                        break;
-                    }
-                }
+                       for (var q = 0; q < productLineItems.length; q++) {
+                           if (productLineItems[q].productID === product.ID) {
+                               productInCart = productLineItems[q];
+                               break;
+                           }
+                       }
 
-                if (productInCart) {
-                    if (productInCart.optionModel) {
-                        productLineItem = cart.createProductLineItem(product, productOptionModel, shipment);
-                        if (quantity) {
-                            productLineItem.setQuantityValue(quantity);
-                        }
-                    } else {
-                        quantityInCart = productInCart.getQuantity();
-                        quantityToSet = quantity ? quantity + quantityInCart : quantityInCart + 1;
-                        productInCart.setQuantityValue(quantityToSet);
-                    }
-                } else {
-                    productLineItem = cart.createProductLineItem(product, productOptionModel, shipment);
+                       if (productInCart) {
+//                           if (productInCart.optionModel) {
+//                               productLineItem = cospaCart.createProductLineItem(product, productOptionModel, shipment);
+//                               if (quantity) {
+//                            	   quantity = parseInt(quantity);
+//                                   productLineItem.setQuantityValue(quantity);
+//                               }
+//                           } else {
+                               quantityInCart = productInCart.getQuantity();
+                               var tempQty =  parseInt(quantity);
+                               quantityToSet = quantity ? tempQty + quantityInCart.value : quantityInCart.value + 1;
+                               quantity = parseInt(quantityToSet);
+                               productInCart.setQuantityValue(quantity);
+                          // }
+                       } else {
+                           productLineItem = cospaCart.createProductLineItem(product, productOptionModel, shipment);
 
-                    if (quantity) {
-                        productLineItem.setQuantityValue(quantity);
-                    }
-                }
+                           if (quantity) {
+                        	   quantity = parseInt(quantity);
+                               productLineItem.setQuantityValue(quantity);
+                           }
+                       }
 
-                /**
-                 * By default, when a bundle is added to cart, all its child products are added too, but if those products are
-                 * variants then the code must replace the master products with the selected variants that get passed in the
-                 * HTTP params as childPids along with any options. Params: CurrentHttpParameterMap.childPids - comma separated list of
-                 * pids of the bundled products that are variations.
-                 */
-                if (request.httpParameterMap.childPids.stringValue && product.bundle) {
-                    var childPids = request.httpParameterMap.childPids.stringValue.split(',');
-
-                    for (i = 0; i < childPids.length; i++) {
-                        var childProduct = Product.get(childPids[i]).object;
-
-                        if (childProduct) {
-                            childProduct.updateOptionSelection(request.httpParameterMap);
-
-                            var foundLineItem = this.getBundledProductLineItemByPID(lineItem, childProduct.isVariant() ? childProduct.masterProduct.ID : childProduct.ID);
-
-                            if (foundLineItem) {
-                                foundLineItem.replaceProduct(childProduct);
-                            }
-                        }
-                    }
-                }
-                cart.calculate();
+                       if(calculate) {
+                       	cospaCart.calculate();
+                       }
+                   	txn.commit();
+					isComitted = true;
+            	}catch(e) {
+            		TrainerLogger.error(e);
+            	}finally {
+    				if(!isComitted) {
+    					txn.rollback();
+    				}
+    			}
             }
-        });
     },
 
-    /**
-     * Validates the supplied coupon code and if the coupon code is valid, applies the coupon code to the basket.
-     * While applying the coupon code the function adds a new CouponLineItem to the basket, based on the supplied coupon code.
-     * The coupon code gets set at the CouponLineItem.
-     *
-     * A coupon code can be invalid for the following reasons:
-     *  <ul>
-     *  <li>The coupon code was already added to the basket.</li>
-     *  <li>A coupon code of the same coupon is already in basket. Adding a single coupon code of this coupon is sufficient to enable a promotion.
-     *  Adding another coupon code of the same coupon does not make sense, since the promotion is already enabled by the previously added code.</li>
-     *  <li>The number of redemptions of this coupon code is 1 and the code was already redeemed.</li>
-     *  <li>The number of redemptions of this coupon code is > 1 and the maximum numbers of redemptions of this coupon code was already reached.
-     *  The calculation of the redemptions is based on the number of redemptions of this coupon code in past plus
-     * the number of redemptions of other coupon codes of the same coupon in the past.</li>
-     *  <li>The maximum number of times this coupon can be redeemed per customer was already reached.</li>
-     *  <li>The maximum number of times this coupon can be redeemed by a customer within a given time period was already reached.
-     *  The calculation of the redemptions is based on the the number of redemptions of this coupon code in past plus the number of redemptions
-     *  of other coupon codes of the same coupon in the past.</li>
-     *  <li>The coupon code is unknown to the system.</li>
-     *  <li>The coupon is not enabled.</li>
-     *  <li>There exists no active promotion to which the coupon is assigned.</li>
-     *  </ul>
-     * In this case, no CouponLineItem is added to the basket and the returned "Status" object contains the details of
-     * why the coupon was invalid.
-     *
-     * Status: The status object representing a detailed result of the operation. The
-     * status property (Status.status) is set to 0 if the coupon was successfully applied or 1 otherwise.
-     *
-     * The code property (Status.code) is set to one of the following values:
-     *  <ul>
-     *  <li>"OK" = The coupon was applied to the basket.</li>
-     *  <li>CouponStatusCodes.COUPON_CODE_ALREADY_IN_BASKET = Indicates that coupon code was already added to the basket.</li>
-     *  <li>CouponStatusCodes.COUPON_ALREADY_IN_BASKET = Indicates that another code of the same MultiCode/System coupon was already added to basket.</li>
-     *  <li>CouponStatusCodes.COUPON_CODE_ALREADY_REDEEMED = Indicates that code of MultiCode/System coupon was already redeemed.</li>
-     *  <li>CouponStatusCodes.COUPON_CODE_UNKNOWN = Indicates that coupon not found for given coupon code or that the code itself was not found.</li>
-     *  <li>CouponStatusCodes.COUPON_DISABLED = Indicates that coupon is not enabled.</li>
-     *  <li>CouponStatusCodes.REDEMPTION_LIMIT_EXCEEDED = Indicates that number of redemptions per code exceeded.</li>
-     *  <li>CouponStatusCodes.CUSTOMER_REDEMPTION_LIMIT_EXCEEDED = Indicates that number of redemptions per code and customer exceeded.</li>
-     *  <li>CouponStatusCodes.TIMEFRAME_REDEMPTION_LIMIT_EXCEEDED = Indicates that number of redemptions per code, customer and time exceeded.</li>
-     *  <li>CouponStatusCodes.NO_ACTIVE_PROMOTION = Indicates that coupon is not assigned to an active promotion.</li>
-     * </ul>
-     *
-     * @transactional
-     * @alias module:models/CartModel~CartModel/addCoupon
-     * @param {String} couponCode - The code of the coupon to add.
-     * @returns {dw.system.Status} The "Status" object containing details of the add to cart action.
-     */
-    addCoupon: function (couponCode) {
-        if (couponCode) {
-            var cart = this;
-            var campaignBased = true;
-            var addCouponToBasketResult;
-
-            try {
-                addCouponToBasketResult = Transaction.wrap(function () {
-                    return cart.object.createCouponLineItem(couponCode, campaignBased);
-                });
-            } catch (e) {
-                return {CouponStatus: e.errorCode};
-            }
-
-            Transaction.wrap(function (){
-                cart.calculate();
-            });
-            return {CouponStatus: addCouponToBasketResult.statusCode};
-        }
-    },
-
-    /**
-     * Adds a bonus product to the cart associated with the specified BonusDiscountLineItem. The function creates
-     * and returns a ProductLineItem by assigning the specified Product and Quantity to the cart. The function adds
-     * the new ProductLineItem to the default shipment.
-     * The product parameter must be one of the products associated with the BonusDiscountLineItem or the process
-     * fails. The process does not validate if the number of bonus products exceeds the maximum allowed by the bonus
-     * discount. This is the job of application logic.
-     * The function always creates a new product line item, regardless of the value of the site preference
-     * 'Add Product Behavior'.
-     *
-     * @transactional
-     * @alias module:models/CartModel~CartModel/addBonusProduct
-     * @param {dw.order.BonusDiscountLineItem} bonusDiscountLineItem - Line item representing an applied BonusChoiceDiscount in the basket. The
-     * product must be in the bonus product list of this discount.
-     * @param {dw.catalog.Product} product - The product that is to be added to the basket.
-     * @param {dw.util.ArrayList} selectedOptions - Product option array of optionName/optionValue pairs.
-     *
-     *
-     * @returns {dw.order.ProductLineItem} The newly created product line item.
-     */
-    addBonusProduct: function (bonusDiscountLineItem, product, selectedOptions, quantity) {
-
-        var UpdateProductOptionSelections = require('storefront_core/cartridge/scripts/cart/UpdateProductOptionSelections');
-        var ScriptResult = UpdateProductOptionSelections.update({
-            SelectedOptions: selectedOptions,
-            Product: product
-        });
-        var shipment = null;
-        var productLineItem = this.object.createBonusProductLineItem(bonusDiscountLineItem, product, ScriptResult, shipment);
-
-        if (quantity) {
-            productLineItem.setQuantityValue(quantity);
-        }
-
-        return productLineItem;
-    },
-
-    /**
-     * Deletes all the products associated with a bonus discount line item.
-     *
-     * @transactional
-     * @alias module:models/CartModel~CartModel/removeBonusDiscountLineItemProducts
-     * @param {dw.order.BonusDiscountLineItem} bonusDiscountLineItem - The bonus discount line item to remove the
-     * product line items for.
-     */
-    removeBonusDiscountLineItemProducts: function (bonusDiscountLineItem) {
-
-        var plis = bonusDiscountLineItem.getBonusProductLineItems();
-
-        for (var i = 0; i < plis.length; i++) {
-            var pli = plis[i];
-            if (pli.product) {
-                this.removeProductLineItem(pli);
-            }
-        }
-    },
-
-    /**
-     * Returns the product line item of the cart with a specific UUID.
-     *
-     * @alias module:models/CartModel~CartModel/getProductLineItemByUUID
-     * @param {String} lineItemUUID - The UUID of the line item.
-     * @returns {dw.order.ProductLineItem} The product line item or null if not found.
-     */
-    getProductLineItemByUUID: function (lineItemUUID) {
-        var plis = this.getProductLineItems();
-        var lineItem = null;
-
-        for (var i = 0, il = plis.length; i < il; i++) {
-            var item = plis[i];
-            if ((lineItemUUID && item.UUID === lineItemUUID)) {
-                lineItem = item;
-                break;
-            }
-        }
-
-        return lineItem;
-    },
-
-    /**
-     * Searches a bundle line item for a product line item with a specific product ID.
-     * @alias module:models/CartModel~CartModel/getBundledProductLineItemByPID
-     * @param {dw.order.ProductLineItem} bundleLineItem - The bundle product line item, which contains two or more product line items.
-     * @param {String} pid - The product identifier of the product line item to find.
-     * @returns {dw.order.ProductLineItem} The product line item or null if not found.
-     */
-    getBundledProductLineItemByPID: function (bundleLineItem, pid) {
-
-        var plis = bundleLineItem.getBundledProductLineItems();
-        var lineItem = null;
-
-        for (var i = 0, il = plis.length; i < il; i++) {
-            var item = plis[i];
-            if ((pid && item.productID === pid)) {
-                lineItem = item;
-                break;
-            }
-        }
-
-        return lineItem;
-    },
-
-    /**
-     * Returns the bonus discount line item of the cart having the given UUID.
-     *
-     * @alias module:models/CartModel~CartModel/getBonusDiscountLineItemByUUID
-     * @param {String} lineItemUUID - The UUID of the bonus discount line item.
-     * @returns {dw.order.BonusDiscountLineItem} The bonus discount line item or null if not found.
-     */
-    getBonusDiscountLineItemByUUID: function (lineItemUUID) {
-        var plis = this.getBonusDiscountLineItems();
-        var lineItem = null;
-
-        for (var i = 0, il = plis.length; i < il; i++) {
-            var item = plis[i];
-            if ((lineItemUUID && item.UUID === lineItemUUID)) {
-                lineItem = item;
-                break;
-            }
-        }
-
-        return lineItem;
-    },
-
-    /**
-     * Checks the in-store quantity of all product line items
-     * against the store inventory in case the product line item's quantity was
-     * updated. If the store inventory does not have as many of the item in stock as is being purchased,
-     * the product line item is converted from in-store pickup to home delivery.
-     * @transactional
-     * @alias module:models/CartModel~CartModel/checkInStoreProducts
-     */
-    checkInStoreProducts: function () {
-        if (dw.system.Site.getCurrent().getCustomPreferenceValue('enableStorePickUp')) {
-
-            var allProductLineItems = this.getAllProductLineItems();
-            for (var i = 0; i < allProductLineItems.length; i++) {
-                var pli = allProductLineItems[i];
-
-                //Skip product line items that are not in-store.
-                if (pli.custom.fromStoreId) {
-                    //Check the quantity against the inventory of the store with matching storeID,
-                    //if the cart is being updated with a new quantity.
-                    var store = StoreMgr.getStore(pli.custom.fromStoreId);
-                    var storeinventory = ProductInventoryMgr.getInventoryList(store.custom.inventoryListId);
-
-                    if (storeinventory.getRecord(pli.productID).ATS.value >= pli.quantityValue) {
-                        pli.custom.fromStoreId = store.ID;
-                        pli.setProductInventoryList(storeinventory);
-
-                    } else {
-                        //The in-store line item is reset to a regular home delivery item.
-                        pli.custom.fromStoreId = '';
-                        pli.setProductInventoryList(null);
-                        pli.setShipment(this.getDefaultShipment());
-                    }
-                }
-            }
-        }
-    },
-
-    /**
-     * Checks to see if a new bonus discount line item was created by providing a list of 'previous' discount
-     * line items.
-     *
-     * @alias module:models/CartModel~CartModel/getNewBonusDiscountLineItems
-     * @param {dw.util.Collection} previousBonusDiscountLineItems - Baseline collection of bonus discount line items.
-     * @returns {dw.order.BonusDiscountLineItem} The newly created bonus discount line item.
-     */
-    getNewBonusDiscountLineItem: function (previousBonusDiscountLineItems) {
-        var newBonusDiscountLineItems = this.getBonusDiscountLineItems();
-        var newBonusDiscountLineItem;
-
-        var iter = newBonusDiscountLineItems.iterator();
-        while (iter.hasNext()) {
-            var newItem = iter.next();
-            // if there is a new discount line item, return it right away
-            if (!previousBonusDiscountLineItems.contains(newItem)) {
-                newBonusDiscountLineItem = newItem;
-                break;
-            }
-        }
-        return newBonusDiscountLineItem;
-    },
 
     /**
      * Replaces the current product of the specified product line item with the specified product.
@@ -619,47 +230,7 @@ var CartModel = AbstractModel.extend({
         return physicalShipments;
     },
 
-    /**
-     * Cleans the shipments of the current basket by putting all gift certificate line items to single, possibly
-     * new, shipments, with one shipment per gift certificate line item.
-     *
-     * @alias module:models/CartModel~CartModel/updateGiftCertificateShipments
-     * @transactional
-     */
-    updateGiftCertificateShipments: function () {
-
-        // List of line items.
-        var giftCertificatesLI = new ArrayList();
-
-        // Finds gift certificates in shipments that have
-        // product line items and gift certificate line items merged.
-        var shipments = this.getShipments();
-
-        for (var i = 0; i < shipments.length; i++) {
-            var shipment = shipments[i];
-
-            // Skips shipment if no gift certificates are contained.
-            if (shipment.giftCertificateLineItems.size() === 0) {
-                continue;
-            }
-
-            // Skips shipment if it has no products and just one gift certificate is contained.
-            if (shipment.productLineItems.size() === 0 && shipment.giftCertificateLineItems.size() === 1) {
-                continue;
-            }
-
-            // If there are gift certificates, add them to the list.
-            if (shipment.giftCertificateLineItems.size() > 0) {
-                giftCertificatesLI.addAll(shipment.giftCertificateLineItems);
-            }
-        }
-
-        // Create a shipment for each gift certificate line item.
-        for (var n = 0; n < giftCertificatesLI.length; n++) {
-            var newShipmentID = this.determineUniqueShipmentID('Shipment #');
-            giftCertificatesLI[n].setShipment(this.createShipment(newShipmentID));
-        }
-    },
+   
 
     /**
      * Determines a unique shipment ID for shipments in the current cart and the given base ID. The function appends
@@ -903,10 +474,10 @@ var CartModel = AbstractModel.extend({
             var baseShippingAdjusted = null;
             if (priceAdjTotal >= 0) {
                 baseShippingAdjusted = baseShipping.subtract(priceAdjTotal);
-             
             } else {
                 baseShippingAdjusted = baseShipping.add(priceAdjTotal);
             }
+
             return {
                 shippingExclDiscounts: this.getShippingTotalPrice(),
                 shippingInclDiscounts: this.getAdjustedShippingTotalPrice(),
@@ -956,22 +527,9 @@ var CartModel = AbstractModel.extend({
                 }
 
             }
-            
-            // Added By Muni
-           // var  productShippingCost = new Money(100.0, this.getCurrencyCode()); // total of all price adjustments
-         //   shipment.shippingTotalPrice=  productShippingCost;
-//          var shippingLineItem =  shipment.getShippingLineItem(shipmentID)
-//          
-//          if(!shippingLineItem) {
-//        	shippingLineItem =  shipment.createShippingLineItem(shipmentID);
-//          }
-//          var shippingCost  = parseInt(200);
-//          shippingLineItem.setPriceValue(shippingCost);
-          // shippingLineItem.createShippingPriceAdjustment("TestShippigLineItem")
-           
-           // END Muni
+
             // Sets this shipping method.
-          	//shipment.setShippingMethod(method);
+            shipment.setShippingMethod(method);
             return;
         }
 
@@ -1013,64 +571,6 @@ var CartModel = AbstractModel.extend({
         return ShippingMgr.getShipmentShippingModel(this.getDefaultShipment()).getApplicableShippingMethods(address);
     },
 
-    /**
-     * Calculates the amount to be paid by a non-gift certificate payment instrument based on the given basket.
-     * The function subtracts the amount of all redeemed gift certificates from the order total and returns this
-     * value.
-     *
-     * @alias module:models/CartModel~CartModel/getNonGiftCertificateAmount
-     * @returns {dw.value.Money} The amount to be paid by a non-gift certificate payment instrument.
-     */
-    getNonGiftCertificateAmount: function () {
-        // The total redemption amount of all gift certificate payment instruments in the basket.
-        var giftCertTotal = new Money(0.0, this.getCurrencyCode());
-
-        // Gets the list of all gift certificate payment instruments
-        var gcPaymentInstrs = this.getGiftCertificatePaymentInstruments();
-        var iter = gcPaymentInstrs.iterator();
-        var orderPI = null;
-
-        // Sums the total redemption amount.
-        while (iter.hasNext()) {
-            orderPI = iter.next();
-            giftCertTotal = giftCertTotal.add(orderPI.getPaymentTransaction().getAmount());
-        }
-
-        // Gets the order total.
-        var orderTotal = this.getTotalGrossPrice();
-
-        // Calculates the amount to charge for the payment instrument.
-        // This is the remaining open order total that must be paid.
-        var amountOpen = orderTotal.subtract(giftCertTotal);
-
-        // Returns the open amount to be paid.
-        return amountOpen;
-    },
-
-    /**
-     * Removes a gift certificate payment instrument with the given gift certificate ID
-     * from the basket.
-     *
-     * @transactional
-     * @alias module:models/CartModel~CartModel/removeGiftCertificatePaymentInstrument
-     * @param {String} giftCertificateID - The ID of the gift certificate to remove the payment instrument for.
-     */
-    removeGiftCertificatePaymentInstrument: function (giftCertificateID) {
-
-        // Iterates over the list of payment instruments.
-        var gcPaymentInstrs = this.getGiftCertificatePaymentInstruments(giftCertificateID);
-        var iter = gcPaymentInstrs.iterator();
-        var existingPI = null;
-
-        // Remove (one or more) gift certificate payment
-        // instruments for this gift certificate ID.
-        while (iter.hasNext()) {
-            existingPI = iter.next();
-            this.removePaymentInstrument(existingPI);
-        }
-
-        return;
-    },
 
     /**
      * Deletes multiple payment instruments.
@@ -1148,23 +648,7 @@ var CartModel = AbstractModel.extend({
         return true;
     },
 
-    /**
-     * Creates a list of gift certificate ids from gift certificate payment instruments.
-     *
-     * @alias module:models/CartModel~CartModel/getGiftCertIdList
-     * @returns {dw.util.ArrayList} The list of gift certificate IDs.
-     */
-    getGiftCertIdList: function () {
-        var gcIdList = new ArrayList();
-        var gcPIIter = this.getGiftCertificatePaymentInstruments.iterator();
-
-        while (gcPIIter.hasNext()) {
-            gcIdList.add((gcPIIter.next()).getGiftCertificateCode());
-        }
-
-        return gcIdList;
-    },
-
+  
     /**
      * Verifies whether existing non-gift-certificate payment instrument methods or cards are still applicable.
      * Returns the collection of valid and invalid payment instruments.
@@ -1178,69 +662,10 @@ var CartModel = AbstractModel.extend({
      * @returns {dw.util.Collection} InvalidPaymentInstruments - The collection of invalid payment instruments.
      */
     validatePaymentInstruments: function (customer, countryCode, amount) {
-        var paymentHelpers = require('storefront_controllers/cartridge/scripts/payment/common');
+        var paymentHelpers = require('~/cartridge/scripts/payment/common');
         return paymentHelpers.validatePaymentInstruments(this, countryCode, amount);
     },
 
-    /**
-     * Creates a gift certificate payment instrument from the given gift certificate ID for the basket. The
-     * method attempts to redeem the current balance of the gift certificate. If the current balance exceeds the
-     * order total, this amount is redeemed and the balance is lowered.
-     *
-     * @transactional
-     * @alias module:models/CartModel~CartModel/createGiftCertificatePaymentInstrument
-     * @param {dw.order.GiftCertificate} giftCertificate - The gift certificate.
-     * @returns {dw.order.PaymentInstrument} The created PaymentInstrument.
-     */
-    createGiftCertificatePaymentInstrument: function (giftCertificate) {
-
-        // Removes any duplicates.
-        // Iterates over the list of payment instruments to check.
-        var gcPaymentInstrs = this.getGiftCertificatePaymentInstruments(giftCertificate.getGiftCertificateCode()).iterator();
-        var existingPI = null;
-
-        // Removes found gift certificates, to prevent duplicates.
-        while (gcPaymentInstrs.hasNext()) {
-            existingPI = gcPaymentInstrs.next();
-            this.removePaymentInstrument(existingPI);
-        }
-
-        // Fetches the balance and the order total.
-        var balance = giftCertificate.getBalance();
-        var orderTotal = this.getTotalGrossPrice();
-
-        // Sets the amount to redeem equal to the remaining balance.
-        var amountToRedeem = balance;
-
-        // Since there may be multiple gift certificates, adjusts the amount applied to the current
-        // gift certificate based on the order total minus the aggregate amount of the current gift certificates.
-
-        var giftCertTotal = new Money(0.0, this.getCurrencyCode());
-
-        // Iterates over the list of gift certificate payment instruments
-        // and updates the total redemption amount.
-        gcPaymentInstrs = this.getGiftCertificatePaymentInstruments().iterator();
-        var orderPI = null;
-
-        while (gcPaymentInstrs.hasNext()) {
-            orderPI = gcPaymentInstrs.next();
-            giftCertTotal = giftCertTotal.add(orderPI.getPaymentTransaction().getAmount());
-        }
-
-        // Calculates the remaining order balance.
-        // This is the remaining open order total that must be paid.
-        var orderBalance = orderTotal.subtract(giftCertTotal);
-
-        // The redemption amount exceeds the order balance.
-        // use the order balance as maximum redemption amount.
-        if (orderBalance < amountToRedeem) {
-            // Sets the amount to redeem equal to the order balance.
-            amountToRedeem = orderBalance;
-        }
-
-        // Creates a payment instrument from this gift certificate.
-        return this.object.createGiftCertificatePaymentInstrument(giftCertificate.getGiftCertificateCode(), amountToRedeem);
-    },
 
     /**
      * Creates a new QuantityLineItem helper object for each quantity of a ProductLineItem, if one does not already exist.
@@ -1439,8 +864,6 @@ var CartModel = AbstractModel.extend({
                 return OrderMgr.createOrder(basket);
             });
         } catch (error) {
-        	var TrainerLogger = Logger.getLogger('training','training');
-			TrainerLogger.error(error);
             return;
         }
 
@@ -1462,140 +885,10 @@ var CartModel = AbstractModel.extend({
         while (iter.hasNext()) {
             this.removePaymentInstrument(iter.next());
         }
-    },
-
-    /**
-     * Gets a gift certificate line item.
-     *
-     * @alias module:models/CartModel~CartModel/removeExistingPaymentInstruments
-     * @param {String} uuid - UUID of the gift certificate line item to retrieve.
-     * @return {dw.order.GiftCertificate | null} giftCertificate object with the passed UUID or null if no gift certificate with the passed UUID exists in the cart.
-     */
-    getGiftCertificateLineItemByUUID: function (uuid) {
-        for (var it = this.object.getGiftCertificateLineItems().iterator(); it.hasNext();) {
-            var item = it.next();
-            if (item.getUUID() === uuid) {
-                return item;
-            }
-        }
-        return null;
-    },
-    
-    //  Added by Muni for Copas Project
-    calculateShippmentForProducts :function () {
-    	
-	   	 var shippingColl = this.getShipments();
-	   	 var ite = shippingColl.iterator();
-	   	 var additionalShipmentId = "AdditionalShipmentID";
-	
-   		while(ite.hasNext()) {
-	   		 
-		  var shipment = ite.next();
-		  var productLineIter  = shipment.getProductLineItems().iterator();
-		  var orderAddress = shipment.getShippingAddress();
-   		  
-		  var city,state,stateCode;
-   		  if(orderAddress){
-   			 city = orderAddress.getCity();
-     		// state = orderAddress.getState();
-     		 stateCode = orderAddress.getStateCode();
-   		  }
-   		  
-   		  var totalShippmentCost=0;
-   		  var additionalShipmentCost = 0;
-   		  var dokonShipmentCost=0;
-   		  
-   		  while(productLineIter.hasNext()) {
-	   			var  prod  = productLineIter.next();
-	   			var prodCustom = prod.getProduct().custom;
-	   			
-	   			var qty = prod.getQuantity().getValue();
-	   			// Exclude Dokon Products. Dokon cost will be calculated at later stage
-	   			if(prodCustom.baseShippingCost && !prodCustom.dokon ) {
-	   				totalShippmentCost = totalShippmentCost+(prodCustom.baseShippingCost*qty);
-	   				
-	   			}else if(prodCustom.baseShippingCost && prodCustom.dokon ) {
-	   				// Find the lowest Dokon shipment cost
-	   				if(dokonShipmentCost==0){
-	   					dokonShipmentCost = prodCustom.baseShippingCost;
-	   				}else if(dokonShipmentCost >  prodCustom.baseShippingCost ){
-	   					dokonShipmentCost = prodCustom.baseShippingCost;
-	   				}
-	   			}
-	   			
-	   			// calculate Additional Shipment cost.. Additional shipment costs are stored on SKU as CSV with delimenter : between State code and Cost  Ex: NY:50,CH:30,TY:10
-	   			var addShippCost = prodCustom.additionalShippingCost;
-	   			if(addShippCost&&stateCode) {
-	   				var costs = addShippCost.split(','+stateCode+':');
-	   				if(costs && costs.length) {
-   						var cost = costs[1];
-   						if(cost) {
-   							var costArr = cost.split(',');
-   	   						if(costArr[0]) {
-   	   							additionalShipmentCost = additionalShipmentCost+(parseInt(costArr[0])*qty);
-   	   						}
-   						}
-	   				}
-	   			}
-	   			
-	   			prod.custom.totalShippingCost=parseInt(totalShippmentCost);
-	   			prod.custom.totalAdditionalShippingCost=parseInt(additionalShipmentCost);
-	   			// Find the lowest price of DOKON products (if multiple DOKON products exists in shipemnt) 
-   		  }
-   		  
-   		  // Remove all shipping items if exists.
-   		  var shippingLineItemsIte = shipment.getShippingLineItems().iterator();
-   		
-   		  while(shippingLineItemsIte.hasNext()){
-   			  shipment.removeShippingLineItem(shippingLineItemsIte.next());
-   		  }
-   		
-		  	// var currentShippingMethod =  ShippingMgr.getDefaultShippingMethod();
-	 		//shipment.setShippingMethod(currentShippingMethod);  
-	 		
-	 		var shippingLineItem =  shipment.getShippingLineItem(shipment.getID());
-	          
-	       if(!shippingLineItem) {
-	    	   	shippingLineItem =  shipment.createShippingLineItem(shipment.getID());
-	        }
-	       totalShippmentCost  = parseInt(dokonShipmentCost+totalShippmentCost);
-	       shippingLineItem.setPriceValue(totalShippmentCost);
-	       
-	       // Create Additional Shipment as seperate line item . TODO Check, if total can be added to existing Shipment item
-	       if(additionalShipmentCost >0) {
-	   	    	var additionalShipppingLineItem = shipment.createShippingLineItem(additionalShipmentId);
-	   	    	additionalShipppingLineItem.setPriceValue(parseInt(additionalShipmentCost));
-	       }
-	}
-	   		
-   }
+    }
 
 });
 
-/**
- * Gets a new instance for the current or a given basket.
- *
- * @alias module:models/CartModel~CartModel/get
- * @param parameter {dw.order.Basket=} The basket object to enhance/wrap. If NULL the basket is retrieved from
- * the current session, if existing.
- * @returns {module:models/CartModel~CartModel}
- */
-CartModel.get = function (parameter) {
-    var basket = null;
-
-    if (!parameter) {
-
-        var currentBasket = BasketMgr.getCurrentBasket();
-
-        if (currentBasket !== null) {
-            basket = currentBasket;
-        }
-
-    } else if (typeof parameter === 'object') {
-        basket = parameter;
-    }
-    return (basket !== null) ? new CartModel(basket) : null;
-};
 
 /**
  * Gets or creates a new instance of a basket.
@@ -1603,7 +896,7 @@ CartModel.get = function (parameter) {
  * @alias module:models/CartModel~CartModel/goc
  * @returns {module:models/CartModel~CartModel}
  */
-CartModel.goc = function () {
+CospaCartModel.goc = function () {
     var obj = null;
 
     var basket = BasketMgr.getCurrentOrNewBasket();
@@ -1612,34 +905,10 @@ CartModel.goc = function () {
         obj = basket;
     }
 
-    return new CartModel(obj);
+    return new CospaCartModel(obj);
 };
 
 
 
-
-
-
-function addProductToDownloadBasket(productObj,qty) {
-	var training_app = require('training/cartridge/scripts/training_app');
-	var downloadBasket = training_app.getModel('DownloadBasket').get();
-	var prodcutData = productObj.ID+','+productObj.name+','+qty+','+productObj.priceModel.price.value;
-	downloadBasket.addProductToDownloadBasket(prodcutData);
-}
-
-
-function addProductToProductList(productObj,qty) {
-	var training_app = require('training/cartridge/scripts/training_app');
-	if (customer.authenticated) {
-		var DownloadBasket = training_app.getModel('DownloadBasket');
-		var productList = DownloadBasket.getProductListMgrForCustomer();
-		if(productList) {
-			productList.addProductDownlodroductList(productObj,qty);
-		}
-	}
-}
-
-
-
 /** The cart class */
-module.exports = CartModel;
+module.exports = CospaCartModel;

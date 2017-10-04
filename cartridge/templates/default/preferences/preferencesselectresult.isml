@@ -1,0 +1,11 @@
+<isdecorate template="account/pt_account">
+	<h3>
+		${Resource.msgf('global.newsletterthanks',
+			'locale', 
+			null, 
+			pdict.CurrentForms.preferences.interestApparel.value,  
+			pdict.CurrentForms.preferences.interestApparel.value,
+			pdict.CurrentForms.preferences.interestedinNewsletter.value )}
+	</h3>
+	Back to <a href="${URLUtils.url('Preferences-Start')}">Preferences Subscription</a>.
+</isdecorate>

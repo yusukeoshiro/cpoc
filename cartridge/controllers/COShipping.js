@@ -17,8 +17,9 @@ var Transaction = require('dw/system/Transaction');
 var URLUtils = require('dw/web/URLUtils');
 
 /* Script Modules */
-var app = require('~/cartridge/scripts/app');
-var guard = require('~/cartridge/scripts/guard');
+var app = require('storefront_controllers/cartridge/scripts/app');
+var training_app = require('training/cartridge/scripts/training_app');
+var guard = require('storefront_controllers/cartridge/scripts/guard');
 
 /**
  * Prepares shipments. Theis function separates gift certificate line items from product
@@ -32,7 +33,7 @@ var guard = require('~/cartridge/scripts/guard');
  */
 function prepareShipments() {
     var cart, homeDeliveries;
-    cart = app.getModel('Cart').get();
+    cart = training_app.getModel('Cart').get();
 
     homeDeliveries = Transaction.wrap(function () {
         var homeDeliveries = false;
@@ -63,7 +64,7 @@ function prepareShipments() {
  * @transactional
  */
 function start() {
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
     var physicalShipments, pageMeta, homeDeliveries;
 
     if (!cart) {
@@ -73,7 +74,7 @@ function start() {
     // Redirects to multishipping scenario if more than one physical shipment is contained in the basket.
     physicalShipments = cart.getPhysicalShipments();
     if (Site.getCurrent().getCustomPreferenceValue('enableMultiShipping') && physicalShipments && physicalShipments.size() > 1) {
-        app.getController('COShippingMultiple').Start();
+    	training_app.getController('COShippingMultiple').Start();
         return;
     }
 
@@ -102,7 +103,7 @@ function start() {
     if (cart.getProductLineItems().size() === 0) {
         app.getController('COBilling').Start();
     } else {
-        pageMeta = require('~/cartridge/scripts/meta');
+        pageMeta = require('storefront_controllers/cartridge/scripts/meta');
         pageMeta.update({
             pageTitle: Resource.msg('singleshipping.meta.pagetitle', 'checkout', 'SiteGenesis Checkout')
         });
@@ -156,7 +157,7 @@ function handleShippingSettings(cart) {
 function updateAddressDetails() {
     var addressID, segments, lookupCustomer, lookupID, address, profile;
     //Gets an empty cart object from the CartModel.
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
 
     if (!cart) {
         app.getController('Cart').Show();
@@ -212,7 +213,7 @@ function singleShipping() {
     var singleShippingForm = app.getForm('singleshipping');
     singleShippingForm.handleAction({
         save: function () {
-            var cart = app.getModel('Cart').get();
+            var cart = training_app.getModel('Cart').get();
             if (!cart) {
                 // @FIXME redirect
                 app.getController('Cart').Show();
@@ -236,12 +237,12 @@ function singleShipping() {
             // Mark step as fulfilled.
             session.forms.singleshipping.fulfilled.value = true;
             // @FIXME redirect
-            app.getController('COBilling').Start();
+            training_app.getController('COBilling').Start();
         },
         selectAddress: function () {
-            updateAddressDetails(app.getModel('Cart').get());
+            updateAddressDetails(training_app.getModel('Cart').get());
 
-            var pageMeta = require('~/cartridge/scripts/meta');
+            var pageMeta = require('storefront_controllers/cartridge/scripts/meta');
             pageMeta.update({
                 pageTitle: Resource.msg('singleshipping.meta.pagetitle', 'checkout', 'SiteGenesis Checkout')
             });
@@ -249,7 +250,7 @@ function singleShipping() {
                 ContinueURL: URLUtils.https('COShipping-SingleShipping')
             }).render('checkout/shipping/singleshipping');
         },
-        shipToMultiple: app.getController('COShippingMultiple').Start,
+        shipToMultiple: training_app.getController('COShippingMultiple').Start,
         error: function () {
             response.redirect(URLUtils.https('COShipping-Start'));
         }
@@ -263,7 +264,7 @@ function singleShipping() {
  * @transaction
  */
 function selectShippingMethod() {
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
     var TransientAddress = app.getModel('TransientAddress');
     var address, applicableShippingMethods;
 
@@ -306,11 +307,11 @@ function selectShippingMethod() {
  */
 function updateShippingMethodList() {
     var i, address, applicableShippingMethods, shippingCosts, currentShippingMethod, method;
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
     var TransientAddress = app.getModel('TransientAddress');
 
     if (!cart) {
-        app.getController('Cart').Show();
+    	training_app.getController('Cart').Show();
         return;
     }
     address = new TransientAddress();
@@ -340,6 +341,11 @@ function updateShippingMethodList() {
 
     Transaction.wrap(function () {
         cart.updateShipmentShippingMethod(cart.getDefaultShipment().getID(), currentShippingMethod.getID(), currentShippingMethod, applicableShippingMethods);
+        
+        // Added by Muni for Product Shipping Cost // START
+        cart.calculateShippmentForProducts();
+        // END
+        
         cart.calculate();
     });
 
@@ -359,7 +365,7 @@ function updateShippingMethodList() {
  * address parameters are included in the request parameters.
  */
 function getApplicableShippingMethodsJSON() {
-    var cart = app.getModel('Cart').get();
+    var cart = training_app.getModel('Cart').get();
     var TransientAddress = app.getModel('TransientAddress');
     var address, applicableShippingMethods;
 

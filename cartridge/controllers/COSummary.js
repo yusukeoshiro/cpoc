@@ -15,10 +15,12 @@ var Transaction = require('dw/system/Transaction');
 var URLUtils = require('dw/web/URLUtils');
 
 /* Script Modules */
-var app = require('~/cartridge/scripts/app');
-var guard = require('~/cartridge/scripts/guard');
+var app = require('storefront_controllers/cartridge/scripts/app');
+var guard = require('storefront_controllers/cartridge/scripts/guard');
 
-var Cart = app.getModel('Cart');
+var training_app = require('training/cartridge/scripts/training_app');
+
+var Cart = training_app.getModel('Cart');
 
 /**
  * Renders the summary page prior to order creation.
@@ -30,7 +32,7 @@ function start(context) {
     // Checks whether all payment methods are still applicable. Recalculates all existing non-gift certificate payment
     // instrument totals according to redeemed gift certificates or additional discounts granted through coupon
     // redemptions on this page.
-    var COBilling = app.getController('COBilling');
+    var COBilling = training_app.getController('COBilling');
     if (!COBilling.ValidatePayment(cart)) {
         COBilling.Start();
         return;
@@ -45,7 +47,7 @@ function start(context) {
             }
         });
 
-        var pageMeta = require('~/cartridge/scripts/meta');
+        var pageMeta = require('storefront_controllers/cartridge/scripts/meta');
         var viewContext = require('storefront_core/cartridge/scripts/common/extend').immutable(context, {
             Basket: cart.object
         });
@@ -62,7 +64,7 @@ function submit() {
     // Calls the COPlaceOrder controller that does the place order action and any payment authorization.
     // COPlaceOrder returns a JSON object with an order_created key and a boolean value if the order was created successfully.
     // If the order creation failed, it returns a JSON object with an error key and a boolean value.
-    var placeOrderResult = app.getController('COPlaceOrder').Start();
+    var placeOrderResult = training_app.getController('COPlaceOrder').Start();
     if (placeOrderResult.error) {
         start({
             PlaceOrderError: placeOrderResult.PlaceOrderError
@@ -92,7 +94,7 @@ function showConfirmation(order) {
     app.getForm('profile.login.passwordconfirm').clear();
     app.getForm('profile.login.password').clear();
 
-    var pageMeta = require('~/cartridge/scripts/meta');
+    var pageMeta = require('storefront_controllers/cartridge/scripts/meta');
     pageMeta.update({pageTitle: Resource.msg('confirmation.meta.pagetitle', 'checkout', 'SiteGenesis Checkout Confirmation')});
     app.getView({
         Order: order,

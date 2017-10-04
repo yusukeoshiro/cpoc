@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<form>
+ 
+	<field formid="interestApparel" label="forms.interestedinApparel" type="boolean" mandatory="false" binding="custom.interestApparel" />
+	<field formid="interestElectronics" label="forms.interestedinElectronics" type="boolean" mandatory="false" binding="custom.interestElectronics" />
+	<field formid="interestedinNewsletter" label="forms.interestedinNewsletter" type="boolean" mandatory="false" binding="custom.interestedinNewsletter" />
+	
+	<action formid="apply" valid-form="false"/>
+	
+</form>

@@ -1,0 +1,13 @@
+<isdecorate template="product/pt_productdetails">
+
+${pdict.myProduct.name} has been found
+
+<iscomment>
+	<isinclude template="product/producttile"/>
+	 <isinclude url="${URLUtils.url('Product-IncludeLastVisited')}"/>
+</iscomment>
+
+ <isinclude template="util/modules" />
+ <isproducttile  product="${pdict.myProduct}" showswatches="${true}" showpricing="${true}" showrating="${true}"/>
+
+</isdecorate>

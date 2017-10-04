@@ -14,10 +14,11 @@ var UUIDUtils = require('dw/util/UUIDUtils');
 var URLUtils = require('dw/web/URLUtils');
 
 /* Script Modules */
-var app = require('~/cartridge/scripts/app');
-var guard = require('~/cartridge/scripts/guard');
+var app = require('storefront_controllers/cartridge/scripts/app');
+var training_app = require('training/cartridge/scripts/training_app');
+var guard = require('storefront_controllers/cartridge/scripts/guard');
 
-var Cart = app.getModel('Cart');
+var Cart = training_app.getModel('Cart');
 var TransientAddress = app.getModel('TransientAddress');
 
 /**
@@ -44,7 +45,7 @@ function start() {
 
         initAddressForms(cart, quantityLineItems);
 
-        app.getController('COShipping').PrepareShipments();
+        training_app.getController('COShipping').PrepareShipments();
         Transaction.wrap(function () {
             cart.calculate();
         });
@@ -110,7 +111,7 @@ function startShipments() {
 
     if (cart) {
 
-        app.getController('COShipping').PrepareShipments();
+    	training_app.getController('COShipping').PrepareShipments();
 
         // Initializes the forms for the multishipment setting.
         session.forms.multishipping.shippingOptions.clearFormElement();
@@ -127,6 +128,9 @@ function startShipments() {
         }
 
         Transaction.wrap(function () {
+        	 // Added by Muni for Product Shipping Cost // START
+            cart.calculateShippmentForProducts();
+            // END
             cart.calculate();
         });
 
@@ -174,7 +178,7 @@ function multiShippingMethods() {
             // Mark step as fulfilled.
             session.forms.multishipping.shippingOptions.fulfilled.value = true;
 
-            app.getController('COBilling').Start();
+            training_app.getController('COBilling').Start();
             return;
         }
     });
@@ -358,7 +362,7 @@ function addEditAddress() {
 function addEditAddressJSON() {
     var addEditAddressResult = addEditAddress();
 
-    let r = require('~/cartridge/scripts/util/Response');
+    let r = require('storefront_controllers/cartridge/scripts/util/Response');
     r.renderJSON({
         address: addEditAddressResult.address,
         success: addEditAddressResult.success

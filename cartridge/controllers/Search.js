@@ -13,8 +13,8 @@ var ContentMgr = require('dw/content/ContentMgr');
 var SearchModel = require('dw/catalog/SearchModel');
 
 /* Script Modules */
-var app = require('~/cartridge/scripts/app');
-var guard = require('~/cartridge/scripts/guard');
+var app = require('storefront_controllers/cartridge/scripts/app');
+var guard = require('storefront_controllers/cartridge/scripts/guard');
 
 /**
  * Renders a full-featured product search result page.
@@ -81,7 +81,7 @@ function show() {
             }
 
             if (productSearchModel.category) {
-                require('~/cartridge/scripts/meta').update(productSearchModel.category);
+                require('storefront_controllers/cartridge/scripts/meta').update(productSearchModel.category);
             }
 
             if (productSearchModel.categorySearch && !productSearchModel.refinedCategorySearch && productSearchModel.category.template) {

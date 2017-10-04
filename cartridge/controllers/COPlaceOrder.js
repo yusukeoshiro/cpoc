@@ -17,10 +17,12 @@ var Status = require('dw/system/Status');
 var Transaction = require('dw/system/Transaction');
 
 /* Script Modules */
-var app = require('~/cartridge/scripts/app');
-var guard = require('~/cartridge/scripts/guard');
+var app = require('storefront_controllers/cartridge/scripts/app');
+var guard = require('storefront_controllers/cartridge/scripts/guard');
 
-var Cart = app.getModel('Cart');
+var training_app = require('training/cartridge/scripts/training_app');
+
+var Cart = training_app.getModel('Cart');
 var Order = app.getModel('Order');
 var PaymentProcessor = app.getModel('PaymentProcessor');
 
@@ -91,7 +93,7 @@ function start() {
         return {};
     }
 
-    var COShipping = app.getController('COShipping');
+    var COShipping = training_app.getController('COShipping');
 
     // Clean shipments.
     COShipping.PrepareShipments(cart);
@@ -112,7 +114,7 @@ function start() {
         cart.calculate();
     });
 
-    var COBilling = app.getController('COBilling');
+    var COBilling = training_app.getController('COBilling');
 
     Transaction.wrap(function () {
         if (!COBilling.ValidatePayment(cart)) {
@@ -215,7 +217,7 @@ function submitPaymentJSON() {
         }
     }
 
-    if (app.getController('COBilling').HandlePaymentSelection('cart').error || handlePayments().error) {
+    if (training_app.getController('COBilling').HandlePaymentSelection('cart').error || handlePayments().error) {
         app.getView().render('checkout/components/faults');
         return;
     }
@@ -233,10 +235,10 @@ function submit() {
         orderPlacementStatus = Order.submit(order.object);
         if (!orderPlacementStatus.error) {
             clearForms();
-            return app.getController('COSummary').ShowConfirmation(order.object);
+            return training_app.getController('COSummary').ShowConfirmation(order.object);
         }
     }
-    app.getController('COSummary').Start();
+    training_app.getController('COSummary').Start();
 }
 
 /*

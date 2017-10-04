@@ -10,9 +10,10 @@
 var params = request.httpParameterMap;
 
 /* Script Modules */
-var app = require('~/cartridge/scripts/app');
-var guard = require('~/cartridge/scripts/guard');
-
+var app = require('storefront_controllers/cartridge/scripts/app');
+var guard = require('storefront_controllers/cartridge/scripts/guard');
+var CompanyModel = require('training/cartridge/scripts/models/CompanyModel');
+var training_app = require('training/cartridge/scripts/training_app');
 /**
  * Renders the product page.
  *
@@ -22,13 +23,13 @@ var guard = require('~/cartridge/scripts/guard');
  */
 function show() {
 
-    const Product = app.getModel('Product');
+    const Product = training_app.getModel('Product');
     let product = Product.get(params.pid.stringValue);
     const currentVariationModel = product.updateVariationSelection(params);
     product = product.isVariationGroup() ? product : getSelectedProduct(product);
 
     if (product.isVisible()) {
-        require('~/cartridge/scripts/meta').update(product);
+        require('storefront_controllers/cartridge/scripts/meta').update(product);
         app.getView('Product', {
             product: product,
             DefaultVariant: product.getVariationModel().getDefaultVariant(),
@@ -53,7 +54,7 @@ function show() {
  */
 function detail() {
 
-    const Product = app.getModel('Product');
+    const Product = training_app.getModel('Product');
     const product = Product.get(params.pid.stringValue);
 //    
 //    var varaintModel = product.getVariationModel().getDefaultVariant();
@@ -86,11 +87,11 @@ function detail() {
  */
 function getAvailability() {
 
-    var Product = app.getModel('Product');
+    var Product = training_app.getModel('Product');
     var product = Product.get(params.pid.stringValue);
 
     if (product.isVisible()) {
-        let r = require('~/cartridge/scripts/util/Response');
+        let r = require('storefront_controllers/cartridge/scripts/util/Response');
 
         r.renderJSON(product.getAvailability(params.Quantity.stringValue));
     } else {
@@ -110,9 +111,27 @@ function getAvailability() {
  */
 function hitTile() {
 
-    var Product = app.getModel('Product');
+    var Product = training_app.getModel('Product');
     var product = Product.get(params.pid.stringValue);
 
+    
+    	
+    var productDownloaded=false;
+    if (customer.authenticated ) {
+    	
+    	// TODO ... Search Muni
+        var csvString = session.custom['DownloadedProducts'];
+        if(!csvString) {
+        	csvString= CompanyModel.buidDownloadCsvForUserCompanyId();
+        }        
+    	//var csvString= CompanyModel.buidDownloadCsvForUserCompanyId();
+    	if(csvString && csvString.indexOf(product.object.ID)>0) {
+    		productDownloaded = true;
+    	}
+    }
+    
+    // END Muni
+    
     if (product.isVisible()) {
         var productView = app.getView('Product', {
             product: product,
@@ -120,7 +139,8 @@ function hitTile() {
             showpricing: true,
             showpromotion: true,
             showrating: true,
-            showcompare: true
+            showcompare: true,
+            downloaded: productDownloaded
         });
 
         productView.product = product.object;
@@ -140,7 +160,7 @@ function hitTile() {
  */
 function productNavigation() {
 
-    var Product = app.getModel('Product');
+    var Product = training_app.getModel('Product');
     var product = Product.get(params.pid.stringValue);
 
     if (product.isVisible()) {
@@ -203,11 +223,13 @@ function productNavigation() {
  */
 function variation() {
 
-    const Product = app.getModel('Product');
+    const Product = training_app.getModel('Product');
     const resetAttributes = false;
+    var pid = params.pid.stringValue;
     let product = Product.get(params.pid.stringValue);
 
     let currentVariationModel = product.updateVariationSelection(params);
+    var isVaritationGroup = product.isVariationGroup();
     product = product.isVariationGroup() ? product : getSelectedProduct(product);
 
     if (product.isVisible()) {
@@ -229,7 +251,10 @@ function variation() {
                 BonusDiscountLineItem: bonusDiscountLineItem
             }).render('product/components/bonusproduct');
         } else if (params.format.stringValue) {
-            app.getView('Product', {
+        	
+        	
+        	
+        	app.getView('Product', {
                 product: product,
                 GetImages: true,
                 resetAttributes: resetAttributes,
@@ -260,7 +285,7 @@ function variation() {
  */
 function variationPS() {
 
-    var Product = app.getModel('Product');
+    var Product = training_app.getModel('Product');
     var product = Product.get(params.pid.stringValue);
 
     if (product.isVisible()) {
@@ -338,7 +363,7 @@ function getBonusProducts() {
 */
 function getSetItem() {
     var currentVariationModel;
-    var Product = app.getModel('Product');
+    var Product = training_app.getModel('Product');
     var product = Product.get(params.pid.stringValue);
     product = getSelectedProduct(product);
     currentVariationModel = product.updateVariationSelection(params);
